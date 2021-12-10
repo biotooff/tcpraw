@@ -158,11 +158,18 @@ func (conn *TCPConn) captureFlow(handle *net.IPConn, port int) {
 				e.ack = tcp.Seq + 1
 			}
 			if tcp.PSH {
-				if e.ack == tcp.Seq {
+				//if e.ack == tcp.Seq {
 					e.ack = tcp.Seq + uint32(len(tcp.Payload))
-				}
+				//}
 			}
-			e.handle = handle
+			if tcp.RST || tcp.FIN {
+				if(e.handle!=nil){
+					fmt.Println("recv RST | FIN ",e.conn.RemoteAddr())
+					e.handle = nil
+				}
+			}else{
+				e.handle = handle
+			}
 		})
 
 		// push data if it's not orphan
@@ -424,7 +431,7 @@ func Dial(network, address string) (*TCPConn, error) {
 	}
 
 	if ipt, err := iptables.NewWithProtocol(iptables.ProtocolIPv4); err == nil {
-		rule := []string{"-m", "ttl", "--ttl-eq", "1", "-p", "tcp", "-d", raddr.IP.String(), "--dport", fmt.Sprint(raddr.Port), "-j", "DROP"}
+		rule := []string{"-p", "tcp", "-d", raddr.IP.String(), "--dport", fmt.Sprint(raddr.Port),"--tcp-flags","RST","RST", "-j", "DROP"}
 		if exists, err := ipt.Exists("filter", "OUTPUT", rule...); err == nil {
 			if !exists {
 				if err = ipt.Append("filter", "OUTPUT", rule...); err == nil {
@@ -520,7 +527,7 @@ func Listen(network, address string) (*TCPConn, error) {
 	// TODO: what if iptables is not available, the next hop will send back ICMP Time Exceeded,
 	// is this still an acceptable behavior?
 	if ipt, err := iptables.NewWithProtocol(iptables.ProtocolIPv4); err == nil {
-		rule := []string{"-m", "ttl", "--ttl-eq", "1", "-p", "tcp", "--sport", fmt.Sprint(laddr.Port), "-j", "DROP"}
+		rule := []string{"-p", "tcp", "--sport", fmt.Sprint(laddr.Port),"--tcp-flags","RST","RST","-j", "DROP"}
 		if exists, err := ipt.Exists("filter", "OUTPUT", rule...); err == nil {
 			if !exists {
 				if err = ipt.Append("filter", "OUTPUT", rule...); err == nil {
